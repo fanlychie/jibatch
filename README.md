@@ -1,0 +1,2 @@
+# jibatch
+JDBC BATCH INSERT
