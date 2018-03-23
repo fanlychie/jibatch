@@ -8,12 +8,14 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 
 /**
  * 批量处理器
  * Created by fanlychie on 2018/3/19.
  */
-public class BatchHandler {
+public class BatchProcessor {
 
     /**
      * SQL语句
@@ -33,17 +35,19 @@ public class BatchHandler {
     /**
      * 批量处理的线程数
      */
-    private int threads = 10;
+    private int threads;
 
     /**
      * 批量处理事务提交的阀值
      */
-    private int commitThreshold = 100;
+    private int commitThreshold;
 
-    private Logger logger = LoggerFactory.getLogger(BatchHandler.class);
+    private NumberFormat threadNameFormat;
 
-    public BatchHandler() {
+    private Logger logger = LoggerFactory.getLogger(BatchProcessor.class);
 
+    public BatchProcessor() {
+        this(10, 1000);
     }
 
     /**
@@ -52,9 +56,10 @@ public class BatchHandler {
      * @param threads         批量处理的线程数
      * @param commitThreshold 批量处理事务提交的阀值
      */
-    public BatchHandler(int threads, int commitThreshold) {
+    public BatchProcessor(int threads, int commitThreshold) {
         this.threads = threads;
         this.commitThreshold = commitThreshold;
+        this.threadNameFormat = getNumberFormat("Thread-", threads);
     }
 
     /**
@@ -72,47 +77,67 @@ public class BatchHandler {
         // 每条线程负责的行数
         long perthreadRows = rows / threads;
         if (perthreadRows < 1) {
-            throw new IllegalArgumentException("for input rows=" + rows);
+            throw new IllegalArgumentException("For input rows=" + rows);
         }
         // 处理第N-1条线程
         for (int i = 1; i < threads; i++) {
-            new ExecutorThread((i - 1) * perthreadRows + 1, i * perthreadRows).start();
+            new ExecutorThread(i, (i - 1) * perthreadRows + 1, i * perthreadRows).start();
         }
         // 处理最后一条线程, 最后一条线程处理剩余的所有行数据
-        new ExecutorThread((threads - 1) * perthreadRows + 1, rows).start();
+        new ExecutorThread(threads, (threads - 1) * perthreadRows + 1, rows).start();
+    }
+
+    // 数字格式化
+    private NumberFormat getNumberFormat(String prefix, long number) {
+        String formatName = (prefix == null ? "" : prefix);
+        do {
+            formatName += "0";
+        } while ((number /= 10) != 0);
+        return new DecimalFormat(formatName);
     }
 
     // 线程执行器
     private class ExecutorThread extends Thread {
 
+        /**
+         * 起始索引
+         */
         private long index;
 
+        /**
+         * 最大索引
+         */
         private long maxIndex;
 
-        private ExecutorThread(long index, long maxIndex) {
+        private ExecutorThread(int threadIndex, long index, long maxIndex) {
+            super(threadNameFormat.format(threadIndex));
             this.index = index;
             this.maxIndex = maxIndex;
         }
 
         @Override
         public void run() {
+            long count = index;
             Connection conn = dbConn.getConnection();
             PreparedStatement preparedStatement = null;
+            logger.info("Start processing [{}, {}]", index, maxIndex);
             try {
                 preparedStatement = conn.prepareStatement(sql);
                 for (long i = index; i <= maxIndex; i++) {
                     processor.process(preparedStatement);
                     preparedStatement.addBatch();
                     if (i % commitThreshold == 0) {
-                        logger.info("committing");
+                        logger.info("Committing [{}, {}]", count, i);
+                        count += commitThreshold;
                         preparedStatement.executeBatch();
                         conn.commit();
                         preparedStatement.clearBatch();
                     }
                 }
-                logger.info("committing");
+                logger.info("Committing [{}, {}]", count, maxIndex);
                 preparedStatement.executeBatch();
                 conn.commit();
+                logger.info("Finish [{}, {}]", index, maxIndex);
             } catch (Exception e) {
                 throw new RuntimeCastException(e);
             } finally {

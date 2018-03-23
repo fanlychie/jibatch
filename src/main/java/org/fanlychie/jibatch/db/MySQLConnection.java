@@ -47,7 +47,7 @@ public class MySQLConnection implements DatabaseConnection {
         addParam(urlBuilder, "useServerPrepStmts", "false");
         addParam(urlBuilder, "rewriteBatchedStatements", "true");
         this.url = urlBuilder.toString();
-        logger.info(this.url);
+        logger.info("URL [{}]", this.url);
     }
 
     /**
