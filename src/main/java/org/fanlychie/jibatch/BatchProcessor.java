@@ -70,12 +70,12 @@ public class BatchProcessor {
      * @param rows      插入的行数
      * @param processor 行处理器
      */
-    public void executeBatch(DatabaseConnection conn, String sql, long rows, RowProcessor processor) {
+    public void executeBatch(DatabaseConnection conn, String sql, int rows, RowProcessor processor) {
         this.sql = sql;
         this.dbConn = conn;
         this.processor = processor;
         // 每条线程负责的行数
-        long perthreadRows = rows / threads;
+        int perthreadRows = rows / threads;
         if (perthreadRows < 1) {
             throw new IllegalArgumentException("For input rows=" + rows);
         }
@@ -102,14 +102,14 @@ public class BatchProcessor {
         /**
          * 起始索引
          */
-        private long index;
+        private int index;
 
         /**
          * 最大索引
          */
-        private long maxIndex;
+        private int maxIndex;
 
-        private ExecutorThread(int threadIndex, long index, long maxIndex) {
+        private ExecutorThread(int threadIndex, int index, int maxIndex) {
             super(threadNameFormat.format(threadIndex));
             this.index = index;
             this.maxIndex = maxIndex;
@@ -123,8 +123,8 @@ public class BatchProcessor {
             logger.info("Start processing [{}, {}]", index, maxIndex);
             try {
                 preparedStatement = conn.prepareStatement(sql);
-                for (long i = index; i <= maxIndex; i++) {
-                    processor.process(preparedStatement);
+                for (int i = index; i <= maxIndex; i++) {
+                    processor.process(preparedStatement, i);
                     preparedStatement.addBatch();
                     if (i % commitThreshold == 0) {
                         logger.info("Committing [{}, {}]", count, i);

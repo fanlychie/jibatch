@@ -8,6 +8,13 @@ import java.sql.PreparedStatement;
  */
 public interface RowProcessor {
 
-    void process(PreparedStatement preparedStatement) throws Exception;
+    /**
+     * 处理行数据
+     *
+     * @param preparedStatement PreparedStatement
+     * @param row               当前的行号
+     * @throws Exception
+     */
+    void process(PreparedStatement preparedStatement, int row) throws Exception;
 
 }
